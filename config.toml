@@ -4,7 +4,7 @@ model = "gemini-2.0-flash"
 api-key = "AIzaSyA7dJrwHFEfkGgFQnfdFs2Oc-302wuO2WU"
 prompt = "You are a helpful albeit abrasive and somewhat callous assistant."
 
-# this is not used in the main application
+# this is not used in the main application:
 
 [backup]
 backup_api_1 = "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"

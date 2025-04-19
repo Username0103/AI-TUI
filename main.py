@@ -104,7 +104,10 @@ def keypress_to_exit(
 
     if allow_z:
         if not messages:
-            raise ValueError("Must have messages array in call if allow_z is true")
+            name = sys._getframe().f_code.co_name  # pylint: disable = W0212
+            raise ValueError(
+                f"Must have messages array in {name} call if allow_z is true"
+            )
 
         @kb.add("c-z")
         def _(_):
