@@ -45,40 +45,6 @@ class AlternateBuffer:
         sys.stdout.flush()
 
 
-class MessagesArray:
-    def __init__(self) -> None:
-        self.messages: list[Message] = []
-        self.append(Message(role="developer", content=get_prompt()))
-
-    def __len__(self) -> int:
-        return len(self.messages)
-
-    def __getitem__(self, i):
-        return self.messages[i]
-
-    def __iter__(self):
-        self.i = 0  # pylint: disable = W0201
-        return self
-
-    def __next__(self) -> Message:
-        if self.i >= len(self.messages):
-            raise StopIteration
-        self.i += 1
-        return self.messages[self.i - 1]
-
-    def pop(self, i: int) -> Message:
-        return self.messages.pop(i)
-
-    def to_list(self) -> list[dict[str, str]]:
-        return [m.to_dict() for m in self.messages]
-
-    def append(self, d: Message):
-        self.messages.append(d)
-
-    def delete(self, i: int):
-        del self.messages[i]
-
-
 class Message:
     def __init__(
         self,
@@ -89,10 +55,16 @@ class Message:
         self.content = content
 
     def to_dict(self):
-        d = {}
-        d["role"] = self.role
-        d["content"] = self.content
-        return d
+        return {"role": self.role, "content": self.content}
+
+
+class MessagesArray(list[Message]):
+    def __init__(self, initial=None) -> None:
+        super().__init__(initial or [])
+        self.insert(0, Message(role="developer", content=get_prompt()))
+
+    def to_list(self) -> list[dict[str, str]]:
+        return [m.to_dict() for m in self]
 
 
 def check_txt_existence(folder: Path, file: str):
