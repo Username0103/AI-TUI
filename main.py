@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 import sys
+import os  # use env vars
 from pathlib import Path
 from typing import Literal
+import tomllib
 
 
 import mdv
@@ -18,11 +20,11 @@ STARTUP_MESSAGE = (
     'INFO: Press "CTRL" + "D" to submit prompt '
     "or to pass through this info message.\n"
     'Press "CTRL" + "Z" during the AI\'s response '
-    "to undo the message of conversation\n"
-    'Press "CTRL" + "C" during input to exit.'
+    "to undo the message of the conversation.\n"
+    'Press "CTRL" + "C" during input selection to exit.'
 )
 WAITING_MESSAGE = "Processing..."
-API_URL = "https://generativelanguage.googleapis.com/v1beta/"  #
+API_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
 # API_URL = "https://openrouter.ai/api/v1"
 CURRENT_MODEL = "gemini-2.0-flash"
 # CURRENT_MODEL = "google/gemini-2.5-pro-exp-03-25:free"
@@ -102,14 +104,20 @@ def keypress_to_exit(
         @kb.add("c-z")
         def _(_):
             if len(messages) > 0 and messages[-1].role != "developer":
-                deleted.append(messages.pop(-1))
-                print('Deleted last Conversation round. Press "CONTROL" + "Y" to undo')
+                m = messages.pop(-1)
+                deleted.append(m)
+                print(
+                    f'Deleted last message, by {m.role} with {len(m.content)} characters. Press "CONTROL" + "Y" to undo'
+                )
 
         @kb.add("c-y")
         def _(_):
             if len(deleted) > 0:
-                messages.append(deleted.pop(-1))
-                print("Undid last message deletion")
+                m = deleted.pop(-1)
+                messages.append(m)
+                print(
+                    f"Undid last message deletion, was written by {m.role} and had {len(m.content)} characters"
+                )
 
     @kb.add(combo)
     def exit_(event):
@@ -138,10 +146,9 @@ def get_input(messages: MessagesArray):
             prompt_continuation=lambda width, line_number, is_soft_wrap: ">> ",
         ).prompt()
     except KeyboardInterrupt:
-        print("Exited program.")
-        sys.exit()
+        return "", messages, True
 
-    return received_input, messages
+    return received_input, messages, False
 
 
 def make_query(client: OpenAI, messages: MessagesArray) -> str | None:
@@ -177,14 +184,19 @@ def conversate(messages: MessagesArray, api: OpenAI):
     """I don't mind a good RecursionError"""
     clear()
     print("Enter prompt:")
-    query, messages = get_input(messages)
+    query, messages, is_exit = get_input(messages)
+    if is_exit:
+        return
+
     clear()
     print(WAITING_MESSAGE, end="", flush=True)
     messages.append(Message(role="user", content=query))
     response = make_query(api, messages)
     if not response:
         print("ERROR: did not recieve response from API. Exiting...")
-        return None
+        keypress_to_exit("c-d")
+        return
+
     print(f"\r{' ' * len(WAITING_MESSAGE)}\r", end="", flush=True)
     print(mdv.main(response))
     messages.append(Message(role="assistant", content=response))
