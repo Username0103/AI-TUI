@@ -18,7 +18,7 @@ STARTUP_MESSAGE = (
     'INFO: Press "CTRL" + "D" to submit prompt '
     "or to pass through this info message.\n"
     'Press "CTRL" + "Z" during the AI\'s response '
-    "to undo the last round of conversation\n"
+    "to undo the message of conversation\n"
     'Press "CTRL" + "C" during input to exit.'
 )
 WAITING_MESSAGE = "Processing..."
@@ -66,7 +66,7 @@ class MessagesArray:
         self.i += 1
         return self.messages[self.i - 1]
 
-    def pop(self, i:int) -> Message:
+    def pop(self, i: int) -> Message:
         return self.messages.pop(i)
 
     def to_list(self) -> list[dict[str, str]]:
@@ -115,6 +115,7 @@ def get_api(api_key: str) -> OpenAI:
     )
     return client
 
+
 def keypress_to_exit(
     combo: str, allow_z: bool = False, messages: MessagesArray | None = None
 ) -> None:
@@ -128,15 +129,15 @@ def keypress_to_exit(
 
         @kb.add("c-z")
         def _(_):
-            if len(messages) > 0 and messages[-1].role != 'developer':
+            if len(messages) > 0 and messages[-1].role != "developer":
                 deleted.append(messages.pop(-1))
                 print('Deleted last Conversation round. Press "CONTROL" + "Y" to undo')
 
-        @kb.add('c-y')
+        @kb.add("c-y")
         def _(_):
             if len(deleted) > 0:
                 messages.append(deleted.pop(-1))
-                print('Undid last message deletion')
+                print("Undid last message deletion")
 
     @kb.add(combo)
     def exit_(event):
@@ -182,13 +183,17 @@ def make_query(client: OpenAI, messages: MessagesArray) -> str | None:
     return None
 
 
-def update_log(*args: Message) -> None:
+def format_msgs(m_array: MessagesArray | tuple[Message, ...]) -> str:
+    return "".join(f"### {m.role.capitalize()}:\n{m.content}\n\n" for m in m_array)
+
+
+def update_log(*args: Message, old_contents: MessagesArray) -> None:
     file = home / LOG_NAME
-    with file.open(mode="a", encoding="utf-8") as appendable:
-        for message_dict in args:
-            role = message_dict.role
-            content = message_dict.content
-            appendable.write(f"### {role.capitalize()}:\n{content}\n\n")
+    to_write = format_msgs(args)
+    formatted_contents = format_msgs(old_contents)
+
+    with file.open(mode="w", encoding="utf-8") as writey:
+        writey.write(formatted_contents + to_write)
 
 
 def delete_log():
@@ -211,7 +216,7 @@ def conversate(messages: MessagesArray, api: OpenAI):
     print(f"\r{' ' * len(WAITING_MESSAGE)}\r", end="", flush=True)
     print(mdv.main(response))
     messages.append(Message(role="assistant", content=response))
-    update_log(messages[-2], messages[-1])
+    update_log(messages[-2], messages[-1], old_contents=messages)
     keypress_to_exit("c-d", True, messages)
     conversate(messages, api)
 
