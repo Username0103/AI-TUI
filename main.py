@@ -1,7 +1,10 @@
 # pylint: disable = C0116, C0115, C0114
 
+from __future__ import annotations
 import sys
 from pathlib import Path
+from typing import Literal
+
 
 import mdv
 from openai import OpenAI
@@ -12,8 +15,10 @@ from prompt_toolkit.layout.containers import Window
 from prompt_toolkit.shortcuts import clear
 
 STARTUP_MESSAGE = (
-    'INFO: Press "CTRL" + "D" to submit prompt'
-    " or to pass through this info message.\n"
+    'INFO: Press "CTRL" + "D" to submit prompt '
+    "or to pass through this info message.\n"
+    'Press "CTRL" + "Z" during the AI\'s response '
+    "to undo the last round of conversation\n"
     'Press "CTRL" + "C" during input to exit.'
 )
 WAITING_MESSAGE = "Processing..."
@@ -40,6 +45,56 @@ class AlternateBuffer:
         sys.stdout.flush()
 
 
+class MessagesArray:
+    def __init__(self) -> None:
+        self.messages: list[Message] = []
+        self.append(Message(role="developer", content=get_prompt()))
+
+    def __len__(self) -> int:
+        return len(self.messages)
+
+    def __getitem__(self, i):
+        return self.messages[i]
+
+    def __iter__(self):
+        self.i = 0  # pylint: disable = W0201
+        return self
+
+    def __next__(self) -> Message:
+        if self.i >= len(self.messages):
+            raise StopIteration
+        self.i += 1
+        return self.messages[self.i - 1]
+
+    def pop(self, i:int) -> Message:
+        return self.messages.pop(i)
+
+    def to_list(self) -> list[dict[str, str]]:
+        return [m.to_dict() for m in self.messages]
+
+    def append(self, d: Message):
+        self.messages.append(d)
+
+    def delete(self, i: int):
+        del self.messages[i]
+
+
+class Message:
+    def __init__(
+        self,
+        role: Literal["user", "developer", "assistant"],
+        content: str,
+    ):
+        self.role = role
+        self.content = content
+
+    def to_dict(self):
+        d = {}
+        d["role"] = self.role
+        d["content"] = self.content
+        return d
+
+
 def check_txt_existence(folder: Path, file: str):
     if (folder / file).exists():
         return True
@@ -60,10 +115,28 @@ def get_api(api_key: str) -> OpenAI:
     )
     return client
 
-
-def keypress_to_exit(combo) -> None:
+def keypress_to_exit(
+    combo: str, allow_z: bool = False, messages: MessagesArray | None = None
+) -> None:
     """exits when user inputs the specified combo"""
     kb = KeyBindings()
+    deleted: list[Message] = []
+
+    if allow_z:
+        if not messages:
+            raise ValueError("Must have messages array in call if allow_z is true")
+
+        @kb.add("c-z")
+        def _(_):
+            if len(messages) > 0 and messages[-1].role != 'developer':
+                deleted.append(messages.pop(-1))
+                print('Deleted last Conversation round. Press "CONTROL" + "Y" to undo')
+
+        @kb.add('c-y')
+        def _(_):
+            if len(deleted) > 0:
+                messages.append(deleted.pop(-1))
+                print('Undid last message deletion')
 
     @kb.add(combo)
     def exit_(event):
@@ -73,7 +146,7 @@ def keypress_to_exit(combo) -> None:
     app.run()
 
 
-def get_input():
+def get_input(messages: MessagesArray):
     bindings = KeyBindings()
 
     @bindings.add("enter")
@@ -95,23 +168,26 @@ def get_input():
         print("Exited program.")
         sys.exit()
 
-    return received_input
+    return received_input, messages
 
 
-def make_query(client: OpenAI, messages) -> str | None:
-    response = client.chat.completions.create(model=CURRENT_MODEL, messages=messages)
+def make_query(client: OpenAI, messages: MessagesArray) -> str | None:
+    response = client.chat.completions.create(
+        model=CURRENT_MODEL,
+        messages=messages.to_list(),  # type: ignore
+    )
     if response.choices:
         return response.choices[0].message.content
     print(f"\nD: an ERROR!!!: {response}")
     return None
 
 
-def update_log(*args: dict) -> None:
+def update_log(*args: Message) -> None:
     file = home / LOG_NAME
     with file.open(mode="a", encoding="utf-8") as appendable:
         for message_dict in args:
-            role = str(message_dict.get("role"))
-            content = str(message_dict.get("content"))
+            role = message_dict.role
+            content = message_dict.content
             appendable.write(f"### {role.capitalize()}:\n{content}\n\n")
 
 
@@ -120,36 +196,37 @@ def delete_log():
     log.unlink(missing_ok=True)
 
 
-def conversate(messages: list, api: OpenAI):
+def conversate(messages: MessagesArray, api: OpenAI):
     """I don't mind a good RecursionError"""
     clear()
     print("Enter prompt:")
-    query = get_input()
+    query, messages = get_input(messages)
     clear()
     print(WAITING_MESSAGE, end="", flush=True)
-    messages.append({"role": "user", "content": query})
+    messages.append(Message(role="user", content=query))
     response = make_query(api, messages)
     if not response:
         print("ERROR: did not recieve response from API. Exiting...")
         return None
     print(f"\r{' ' * len(WAITING_MESSAGE)}\r", end="", flush=True)
     print(mdv.main(response))
-    messages.append({"role": "assistant", "content": response})
+    messages.append(Message(role="assistant", content=response))
     update_log(messages[-2], messages[-1])
-    keypress_to_exit("c-d")
+    keypress_to_exit("c-d", True, messages)
     conversate(messages, api)
 
 
 def orchestrate() -> None:
-    messages = [{'role': 'developer', 'content': get_prompt()}]
+    messages = MessagesArray()
     key = get_key()
     api = get_api(key)
     conversate(messages, api)
 
-def get_prompt():
-    file = home / 'prompt.txt'
+
+def get_prompt() -> str:
+    file = home / PROMPT_FILE_NAME
     if not file.exists():
-        raise FileNotFoundError(f'Must place a {file} file in {home}')
+        raise FileNotFoundError(f"Must place a {file} file in {home}")
     with file.open() as s:
         contents = s.read()
     return contents
