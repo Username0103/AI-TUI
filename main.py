@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 import sys
-import os  # use env vars
 from pathlib import Path
 from typing import Literal
 import tomllib
@@ -24,15 +23,34 @@ STARTUP_MESSAGE = (
     'Press "CTRL" + "C" during input selection to exit.'
 )
 WAITING_MESSAGE = "Processing..."
-API_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
-# API_URL = "https://openrouter.ai/api/v1"
-CURRENT_MODEL = "gemini-2.0-flash"
-# CURRENT_MODEL = "google/gemini-2.5-pro-exp-03-25:free"
-API_FILE_NAME = "api.txt"
-PROMPT_FILE_NAME = "prompt.txt"
+CONFIG_FILE = "config.toml"
 LOG_NAME = "conversation_log.md"
 
 home = Path(__file__).resolve().parent
+
+
+def get_config():
+    file = home / CONFIG_FILE
+    if not file.exists():
+        raise FileNotFoundError(f"Must place {file} file in {home} directory.")
+    with file.open("rb") as f:
+        data = tomllib.load(f)
+    verify_config(data)
+    return data
+
+
+def verify_config(data: dict):
+    try:
+        m = data["main"]
+        _ = m["model"], m["api-key"], m["prompt"]
+    except KeyError as e:
+        print(
+            f"You need to have the {e.args[0]} section or value in your {CONFIG_FILE} file."
+        )
+        sys.exit(404)
+
+
+config = get_config()["main"]
 
 
 class AlternateBuffer:
@@ -63,28 +81,15 @@ class Message:
 class MessagesArray(list[Message]):
     def __init__(self, initial=None) -> None:
         super().__init__(initial or [])
-        self.insert(0, Message(role="developer", content=get_prompt()))
+        self.insert(0, Message(role="developer", content=config["prompt"]))
 
     def to_list(self) -> list[dict[str, str]]:
         return [m.to_dict() for m in self]
 
 
-def check_txt_existence(folder: Path, file: str):
-    if (folder / file).exists():
-        return True
-    raise FileNotFoundError(f"Must place {file} in {folder}")
-
-
-def get_key() -> str:
-    check_txt_existence(home, API_FILE_NAME)
-    file = home / API_FILE_NAME
-    with file.open(encoding="utf-8") as s:
-        return s.read().strip()
-
-
 def get_api(api_key: str) -> OpenAI:
     client = OpenAI(
-        base_url=API_URL,
+        base_url=config["endpoint"],
         api_key=f"{api_key}",
     )
     return client
@@ -153,7 +158,7 @@ def get_input(messages: MessagesArray):
 
 def make_query(client: OpenAI, messages: MessagesArray) -> str | None:
     response = client.chat.completions.create(
-        model=CURRENT_MODEL,
+        model=config["model"],
         messages=messages.to_list(),  # type: ignore
     )
     if response.choices:
@@ -207,18 +212,9 @@ def conversate(messages: MessagesArray, api: OpenAI):
 
 def orchestrate() -> None:
     messages = MessagesArray()
-    key = get_key()
+    key = config["api-key"]
     api = get_api(key)
     conversate(messages, api)
-
-
-def get_prompt() -> str:
-    file = home / PROMPT_FILE_NAME
-    if not file.exists():
-        raise FileNotFoundError(f"Must place a {file} file in {home}")
-    with file.open() as s:
-        contents = s.read()
-    return contents
 
 
 def startup():

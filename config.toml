@@ -1,10 +1,14 @@
-[default]
-endpoint = https://generativelanguage.googleapis.com/v1beta/openai/
-model = gemini-2.0-flash
-api_key = AIzaSyA7dJrwHFEfkGgFQnfdFs2Oc-302wuO2WU
+[main]
+endpoint = "https://generativelanguage.googleapis.com/v1beta/openai/"
+model = "gemini-2.0-flash"
+api-key = "AIzaSyA7dJrwHFEfkGgFQnfdFs2Oc-302wuO2WU"
 prompt = "You are a helpful albeit abrasive and somewhat callous assistant."
 
+# this is not used in the main application
+
 [backup]
-backup_api_1 = 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
-backup_api_2 = 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
-backup_api_google: AIzaSyA7dJrwHFEfkGgFQnfdFs2Oc-302wuO2WU
+backup_api_1 = "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"
+backup_api_2 = "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"
+backup_api_google = "AIzaSyA7dJrwHFEfkGgFQnfdFs2Oc-302wuO2WU"
+OR_api_key = "https://openrouter.ai/api/v1"
+OR_model_name = "google/gemini-2.5-pro-exp-03-25:free"
