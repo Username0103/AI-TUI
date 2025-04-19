@@ -13,13 +13,13 @@ from prompt_toolkit.shortcuts import clear
 
 STARTUP_MESSAGE = (
     'INFO: Press "CTRL" + "D" to submit prompt'
-    ' or to pass through this info message.\n'
+    " or to pass through this info message.\n"
     'Press "CTRL" + "C" during input to exit.'
 )
 WAITING_MESSAGE = "Processing..."
-API_URL = 'https://generativelanguage.googleapis.com/v1beta/' #
+API_URL = "https://generativelanguage.googleapis.com/v1beta/"  #
 # API_URL = "https://openrouter.ai/api/v1"
-CURRENT_MODEL = 'gemini-2.0-flash'
+CURRENT_MODEL = "gemini-2.0-flash"
 # CURRENT_MODEL = "google/gemini-2.5-pro-exp-03-25:free"
 API_FILE_NAME = "api.txt"
 PROMPT_FILE_NAME = "prompt.txt"
@@ -108,18 +108,20 @@ def make_query(client: OpenAI, messages) -> str | None:
 
 def update_log(*args: dict) -> None:
     file = home / LOG_NAME
-    with file.open(mode='a', encoding="utf-8") as appendable:
+    with file.open(mode="a", encoding="utf-8") as appendable:
         for message_dict in args:
-            role = str(message_dict.get('role'))
-            content = str(message_dict.get('content'))
-            appendable.write(f'### {role.capitalize()}:\n{content}\n\n')
+            role = str(message_dict.get("role"))
+            content = str(message_dict.get("content"))
+            appendable.write(f"### {role.capitalize()}:\n{content}\n\n")
+
 
 def delete_log():
     log = home / LOG_NAME
     log.unlink(missing_ok=True)
 
+
 def conversate(messages: list, api: OpenAI):
-    '''I don't mind a good RecursionError'''
+    """I don't mind a good RecursionError"""
     clear()
     print("Enter prompt:")
     query = get_input()
@@ -134,24 +136,34 @@ def conversate(messages: list, api: OpenAI):
     print(mdv.main(response))
     messages.append({"role": "assistant", "content": response})
     update_log(messages[-2], messages[-1])
-    keypress_to_exit('c-d')
+    keypress_to_exit("c-d")
     conversate(messages, api)
 
 
 def orchestrate() -> None:
+    messages = [{'role': 'developer', 'content': get_prompt()}]
     key = get_key()
     api = get_api(key)
-    conversate([], api)
+    conversate(messages, api)
+
+def get_prompt():
+    file = home / 'prompt.txt'
+    if not file.exists():
+        raise FileNotFoundError(f'Must place a {file} file in {home}')
+    with file.open() as s:
+        contents = s.read()
+    return contents
 
 
 def startup():
     delete_log()
     with AlternateBuffer():
         print(STARTUP_MESSAGE)
-        keypress_to_exit('c-d')
+        keypress_to_exit("c-d")
         clear()
         orchestrate()
         clear()
+
 
 if __name__ == "__main__":
     startup()
