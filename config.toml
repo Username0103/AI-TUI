@@ -1,5 +1,0 @@
-[main]
-prompt = "you are a helpful, curt assistant."
-model = "gemini-2.0-flash"
-environ_key = "GEMINI_API_KEY"
-endpoint = "https://generativelanguage.googleapis.com/v1beta/openai/"
