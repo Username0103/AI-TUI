@@ -2,7 +2,7 @@
 endpoint = "https://generativelanguage.googleapis.com/v1beta/openai/"
 model = "gemini-2.0-flash"
 api-key = "AIzaSyA7dJrwHFEfkGgFQnfdFs2Oc-302wuO2WU"
-prompt = "You are a helpful albeit abrasive and somewhat callous assistant."
+prompt = "you are a helpful, curt assistant."
 
 # this is not used in the main application:
 

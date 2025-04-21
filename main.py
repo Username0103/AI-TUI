@@ -47,10 +47,23 @@ def verify_config(data: dict):
         print(
             f"You need to have the {e.args[0]} section or value in your {CONFIG_FILE} file."
         )
-        sys.exit(404)
+        sys.exit(1)
 
 
 config = get_config()["main"]
+
+
+def get_api(api_key: str) -> OpenAI:
+    client = OpenAI(
+        base_url=config["endpoint"],
+        api_key=f"{api_key}",
+    )
+    return client
+
+
+def delete_log():
+    log = home / LOG_NAME
+    log.unlink(missing_ok=True)
 
 
 class AlternateBuffer:
@@ -87,12 +100,17 @@ class MessagesArray(list[Message]):
         return [m.to_dict() for m in self]
 
 
-def get_api(api_key: str) -> OpenAI:
-    client = OpenAI(
-        base_url=config["endpoint"],
-        api_key=f"{api_key}",
-    )
-    return client
+def format_msgs(m_array: MessagesArray | tuple[Message, ...]) -> str:
+    return "".join(f"### {m.role.capitalize()}:\n{m.content}\n\n" for m in m_array)
+
+
+def update_log(*args: Message, old_contents: MessagesArray) -> None:
+    file = home / LOG_NAME
+    to_write = format_msgs(args)
+    formatted_contents = format_msgs(old_contents)
+
+    with file.open(mode="w", encoding="utf-8") as writey:
+        writey.write(formatted_contents + to_write)
 
 
 def keypress_to_exit(
@@ -170,24 +188,6 @@ def make_query(client: OpenAI, messages: MessagesArray) -> str | None:
     return None
 
 
-def format_msgs(m_array: MessagesArray | tuple[Message, ...]) -> str:
-    return "".join(f"### {m.role.capitalize()}:\n{m.content}\n\n" for m in m_array)
-
-
-def update_log(*args: Message, old_contents: MessagesArray) -> None:
-    file = home / LOG_NAME
-    to_write = format_msgs(args)
-    formatted_contents = format_msgs(old_contents)
-
-    with file.open(mode="w", encoding="utf-8") as writey:
-        writey.write(formatted_contents + to_write)
-
-
-def delete_log():
-    log = home / LOG_NAME
-    log.unlink(missing_ok=True)
-
-
 def conversate(messages: MessagesArray, api: OpenAI):
     """I don't mind a good RecursionError"""
     clear()
@@ -220,7 +220,7 @@ def orchestrate() -> None:
     conversate(messages, api)
 
 
-def startup():
+def startup() -> None:
     delete_log()
     with AlternateBuffer():
         print(STARTUP_MESSAGE)
