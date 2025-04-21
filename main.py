@@ -1,19 +1,26 @@
-# pylint: disable = C0116, C0115, C0114
+# pylint: disable = C0116, C0115, C0114, C0411
 
 from __future__ import annotations
+
+import os
 import sys
+import webbrowser
+from functools import lru_cache
 from pathlib import Path
 from typing import Literal
-import tomllib
-
 
 import mdv
+import pydantic_core
+import toml
+import tomllib
+from dotenv import load_dotenv
 from openai import OpenAI
 from prompt_toolkit import Application, PromptSession
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.layout import Layout
 from prompt_toolkit.layout.containers import Window
 from prompt_toolkit.shortcuts import clear
+from pydantic import BaseModel, ConfigDict
 
 STARTUP_MESSAGE = (
     'INFO: Press "CTRL" + "D" to submit prompt '
@@ -26,54 +33,92 @@ WAITING_MESSAGE = "Processing..."
 CONFIG_FILE = "config.toml"
 LOG_NAME = "conversation_log.md"
 
-home = Path(__file__).resolve().parent
+HOME = Path(__file__).resolve().parent
+# issues:
+# 1: make it so you enter the cli you only handle config after alternate buffer but before the info message
+# 2: make the api key get actually saved into env
 
-
-def get_config():
-    file = home / CONFIG_FILE
+@lru_cache
+def get_config() -> Config:
+    file = HOME / CONFIG_FILE
     if not file.exists():
-        raise FileNotFoundError(f"Must place {file} file in {home} directory.")
+        file.touch()
     with file.open("rb") as f:
         data = tomllib.load(f)
-    verify_config(data)
-    return data
+    if "main" not in data:
+        data["main"] = {}
+    return config_wizard(data["main"])
 
 
-def verify_config(data: dict):
+def write_config(data: dict):
+    file = HOME / CONFIG_FILE
+    with file.open("w") as f:
+        toml.dump(data, f)
+
+
+class Config(BaseModel):
+    prompt: str = "You are a helpful assistant."
+    model: str = "gemini-2.0-flash"
+    environ_key: str = "GEMINI_API_KEY"
+    endpoint: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
+    model_config = ConfigDict(str_min_length=2, frozen=True)
+
+
+def config_wizard(data: dict) -> Config:
+    while True:
+        try:
+            config_data = Config(**data)
+        except pydantic_core.ValidationError as err_array:
+            print(f"Configuration error from {CONFIG_FILE}:\n")
+            for err in err_array.errors():
+                print(
+                    f"Invalid field: {err['loc'][0]}"
+                ) # there should not be nesting in a TOML so index[0] is fine
+                print(f"Error type: {err['msg']}")
+                new_value = input("Enter new value: ")
+                data[err["loc"][0]] = new_value
+        else:
+            break
+    write_config({"main": config_data.model_dump()})
+    return config_data
+
+
+def get_api_key() -> str:
+    env_key = get_config().environ_key
+    denv = HOME / ".env"
+    load_dotenv(dotenv_path=denv)
     try:
-        m = data["main"]
-        _ = m["model"], m["api-key"], m["prompt"]
-    except KeyError as e:
-        print(
-            f"You need to have the {e.args[0]} section or value in your {CONFIG_FILE} file."
+        return os.environ[env_key]
+    except KeyError:
+        api_key = input(
+            f"Enter your the API key used for the {get_config().model} model here:\n>"
         )
-        sys.exit(1)
+        denv.write_text(f"{env_key}={api_key}\n")
+        os.environ[env_key] = api_key  # not really necessary
+        return api_key
 
 
-config = get_config()["main"]
-
-
-def get_api(api_key: str) -> OpenAI:
+def get_api() -> OpenAI:
     client = OpenAI(
-        base_url=config["endpoint"],
-        api_key=f"{api_key}",
+        base_url=get_config().endpoint,
+        api_key=get_api_key(),
     )
     return client
 
 
 def delete_log():
-    log = home / LOG_NAME
+    log = HOME / LOG_NAME
     log.unlink(missing_ok=True)
 
 
 class AlternateBuffer:
     def __enter__(self):
-        # enter alternate buffer
+        # ANSI sequence to enter the buffer
         sys.stdout.write("\x1b[?1049h")
         sys.stdout.flush()
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        # exit alternate buffer
+        # ANSI sequence to exit the buffer
         sys.stdout.write("\x1b[?1049l")
         sys.stdout.flush()
 
@@ -94,7 +139,7 @@ class Message:
 class MessagesArray(list[Message]):
     def __init__(self, initial=None) -> None:
         super().__init__(initial or [])
-        self.insert(0, Message(role="developer", content=config["prompt"]))
+        self.insert(0, Message(role="developer", content=get_config().prompt))
 
     def to_list(self) -> list[dict[str, str]]:
         return [m.to_dict() for m in self]
@@ -104,13 +149,12 @@ def format_msgs(m_array: MessagesArray | tuple[Message, ...]) -> str:
     return "".join(f"### {m.role.capitalize()}:\n{m.content}\n\n" for m in m_array)
 
 
-def update_log(*args: Message, old_contents: MessagesArray) -> None:
-    file = home / LOG_NAME
-    to_write = format_msgs(args)
-    formatted_contents = format_msgs(old_contents)
+def update_log(contents: MessagesArray) -> None:
+    file = HOME / LOG_NAME
+    formatted_contents = format_msgs(contents)
 
     with file.open(mode="w", encoding="utf-8") as writey:
-        writey.write(formatted_contents + to_write)
+        writey.write(formatted_contents)
 
 
 def keypress_to_exit(
@@ -179,7 +223,7 @@ def get_input(messages: MessagesArray):
 
 def make_query(client: OpenAI, messages: MessagesArray) -> str | None:
     response = client.chat.completions.create(
-        model=config["model"],
+        model=get_config().model,
         messages=messages.to_list(),  # type: ignore
     )
     if response.choices:
@@ -188,7 +232,7 @@ def make_query(client: OpenAI, messages: MessagesArray) -> str | None:
     return None
 
 
-def conversate(messages: MessagesArray, api: OpenAI):
+def conversation_loop(messages: MessagesArray, api: OpenAI):
     """I don't mind a good RecursionError"""
     clear()
     print("Enter prompt:")
@@ -208,27 +252,32 @@ def conversate(messages: MessagesArray, api: OpenAI):
     print(f"\r{' ' * len(WAITING_MESSAGE)}\r", end="", flush=True)
     print(mdv.main(response))
     messages.append(Message(role="assistant", content=response))
-    update_log(messages[-2], messages[-1], old_contents=messages)
+    update_log(contents=messages)
     keypress_to_exit("c-d", True, messages)
-    conversate(messages, api)
+    conversation_loop(messages, api)
 
 
-def orchestrate() -> None:
+def orchestrate(api: OpenAI) -> None:
     messages = MessagesArray()
-    key = config["api-key"]
-    api = get_api(key)
-    conversate(messages, api)
+    conversation_loop(messages, api)
 
 
 def startup() -> None:
     delete_log()
     with AlternateBuffer():
+        clear()
+        get_config()
+        clear()
+        api = get_api()
+        clear()
         print(STARTUP_MESSAGE)
         keypress_to_exit("c-d")
         clear()
-        orchestrate()
+        orchestrate(api)
         clear()
 
 
 if __name__ == "__main__":
     startup()
+else:
+    webbrowser.open("https://youtu.be/dQw4w9WgXcQ")
