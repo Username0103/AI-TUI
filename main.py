@@ -16,6 +16,7 @@ import tomllib
 from dotenv import load_dotenv
 from openai import OpenAI
 from prompt_toolkit import Application, PromptSession
+from prompt_toolkit.cursor_shapes import CursorShape
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.layout import Layout
 from prompt_toolkit.layout.containers import Window
@@ -38,6 +39,7 @@ HOME = Path(__file__).resolve().parent
 # 1: make it so you enter the cli you only handle config after alternate buffer but before the info message
 # 2: make the api key get actually saved into env
 
+
 @lru_cache
 def get_config() -> Config:
     file = HOME / CONFIG_FILE
@@ -47,7 +49,7 @@ def get_config() -> Config:
         data = tomllib.load(f)
     if "main" not in data:
         data["main"] = {}
-    return config_wizard(data["main"])
+    return config_wiz(data["main"])
 
 
 def write_config(data: dict):
@@ -57,14 +59,15 @@ def write_config(data: dict):
 
 
 class Config(BaseModel):
+    # the defaults can change via the TOML config
     prompt: str = "You are a helpful assistant."
-    model: str = "gemini-2.0-flash"
-    environ_key: str = "GEMINI_API_KEY"
+    model: str = "gemini-2.5-flash-preview-04-17"
+    environ_key: str = "API_KEY"
     endpoint: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
     model_config = ConfigDict(str_min_length=2, frozen=True)
 
 
-def config_wizard(data: dict) -> Config:
+def config_wiz(data: dict) -> Config:
     while True:
         try:
             config_data = Config(**data)
@@ -73,7 +76,7 @@ def config_wizard(data: dict) -> Config:
             for err in err_array.errors():
                 print(
                     f"Invalid field: {err['loc'][0]}"
-                ) # there should not be nesting in a TOML so index[0] is fine
+                )  # there should not be nesting in a TOML so index[0] is fine
                 print(f"Error type: {err['msg']}")
                 new_value = input("Enter new value: ")
                 data[err["loc"][0]] = new_value
@@ -157,19 +160,12 @@ def update_log(contents: MessagesArray) -> None:
         writey.write(formatted_contents)
 
 
-def keypress_to_exit(
-    combo: str, allow_z: bool = False, messages: MessagesArray | None = None
-) -> None:
+def keypress_to_exit(*comboes: str, messages: MessagesArray | None = None) -> None:
     """exits when user inputs the specified combo"""
     kb = KeyBindings()
     deleted: list[Message] = []
 
-    if allow_z:
-        if not messages:
-            name = sys._getframe().f_code.co_name  # pylint: disable = W0212
-            raise ValueError(
-                f"Must have messages array in {name} call if allow_z is true"
-            )
+    if messages:
 
         @kb.add("c-z")
         def _(_):
@@ -189,7 +185,7 @@ def keypress_to_exit(
                     f"Undid last message deletion, was written by {m.role} and had {len(m.content)} characters"
                 )
 
-    @kb.add(combo)
+    @kb.add(*comboes)
     def exit_(event):
         event.app.exit()
 
@@ -197,28 +193,32 @@ def keypress_to_exit(
     app.run()
 
 
-def get_input(messages: MessagesArray):
-    bindings = KeyBindings()
+def multiline_editor(initial: str = ""):
+    kb = KeyBindings()
 
-    @bindings.add("enter")
+    @kb.add("enter")
     def _(event):
         event.current_buffer.insert_text("\n")
 
-    @bindings.add("c-d")
+    @kb.add("c-d")
     def _(event):
         event.current_buffer.validate_and_handle()
 
-    try:
-        received_input = PromptSession(
-            message=">> ",
-            multiline=True,
-            key_bindings=bindings,
-            prompt_continuation=lambda width, line_number, is_soft_wrap: ">> ",
-        ).prompt()
-    except KeyboardInterrupt:
-        return "", messages, True
+    # buffer = Buffer(document=Document(initial))
+    session = PromptSession(
+        message=">> ",
+        multiline=True,
+        cursor=CursorShape.BLINKING_BEAM,
+        key_bindings=kb,
+        prompt_continuation=lambda width, line_number, is_soft_wrap: ">> ",
+    )
 
-    return received_input, messages, False
+    try:
+        received_input = session.prompt(default=initial)
+    except KeyboardInterrupt:
+        return "", True
+
+    return received_input, False
 
 
 def make_query(client: OpenAI, messages: MessagesArray) -> str | None:
@@ -233,28 +233,28 @@ def make_query(client: OpenAI, messages: MessagesArray) -> str | None:
 
 
 def conversation_loop(messages: MessagesArray, api: OpenAI):
-    """I don't mind a good RecursionError"""
-    clear()
-    print("Enter prompt:")
-    query, messages, is_exit = get_input(messages)
-    if is_exit:
-        return
+    while True:
+        clear()
+        print("Enter prompt:")
+        query, is_exit = multiline_editor()
+        if is_exit:
+            break
 
-    clear()
-    print(WAITING_MESSAGE, end="", flush=True)
-    messages.append(Message(role="user", content=query))
-    response = make_query(api, messages)
-    if not response:
-        print("ERROR: did not recieve response from API. Exiting...")
-        keypress_to_exit("c-d")
-        return
+        clear()
+        print(WAITING_MESSAGE, end="", flush=True)
+        messages.append(Message(role="user", content=query))
+        response = make_query(api, messages)
+        if not response:
+            print("ERROR: did not recieve response from API. Exiting on input.")
+            keypress_to_exit("enter", "escape", "c-d", "c-c")
+            break
 
-    print(f"\r{' ' * len(WAITING_MESSAGE)}\r", end="", flush=True)
-    print(mdv.main(response))
-    messages.append(Message(role="assistant", content=response))
-    update_log(contents=messages)
-    keypress_to_exit("c-d", True, messages)
-    conversation_loop(messages, api)
+        print(f"\r{' ' * len(WAITING_MESSAGE)}\r", end="", flush=True)
+        print(mdv.main(response))
+        messages.append(Message(role="assistant", content=response))
+        update_log(contents=messages)
+        keypress_to_exit("c-d", messages=messages)
+        conversation_loop(messages, api)
 
 
 def orchestrate(api: OpenAI) -> None:
