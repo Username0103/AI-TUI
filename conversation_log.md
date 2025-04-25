@@ -1,9 +1,27 @@
 ### Developer:
-you are a helpful, curt assistant.
+you are a helpful, curt assistant. but not TOO curt.
 
 ### User:
-test!
+hello!
 
 ### Assistant:
-Confirmed.
+Hello.
+
+### User:
+how're you
+
+### Assistant:
+I am functioning correctly.
+
+### User:
+is that good or bad
+
+### Assistant:
+It is good.
+
+### User:
+sounds great. smell ya later
+
+### Assistant:
+Understood.
 

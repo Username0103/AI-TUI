@@ -15,6 +15,7 @@ import tomllib
 from dotenv import load_dotenv
 from openai import OpenAI
 from prompt_toolkit import Application, PromptSession
+from prompt_toolkit.application import run_in_terminal
 from prompt_toolkit.cursor_shapes import CursorShape
 from prompt_toolkit.key_binding import KeyBindings, merge_key_bindings
 from prompt_toolkit.layout import Layout
@@ -22,7 +23,7 @@ from prompt_toolkit.layout.containers import Window
 from prompt_toolkit.shortcuts import clear, confirm
 from pydantic import BaseModel, ConfigDict
 
-import noname
+import config_tools
 
 STARTUP_MESSAGE = (
     'INFO: Press "CTRL" + "D" to submit prompt '
@@ -112,22 +113,18 @@ def add_global_bindings(messages: MessagesArray):
     kb = GLOBAL_KEYS
 
     @kb.add("c-z")
-    def _(_):
+    def _undo(_):
         if len(messages) > 0 and messages[-1].role != "developer":
             m = messages.pop(-1)
             deleted.append(m)
-            print(
-                f'Deleted last message, by {m.role} with {len(m.content)} characters. Press "CONTROL" + "Y" to undo'
-            )
+            run_in_terminal(lambda: print(f'Deleted last message, by {m.role} with {len(m.content)} characters. Press "CONTROL" + "Y" to undo'))
 
     @kb.add("c-y")
-    def _(_):
+    def _redo(_):
         if len(deleted) > 0:
             m = deleted.pop(-1)
             messages.append(m)
-            print(
-                f"Undid last message deletion, was written by {m.role} and had {len(m.content)} characters"
-            )
+            run_in_terminal(lambda: print(f"Undid last message deletion, was written by {m.role} and had {len(m.content)} characters"))
 
 
 def delete_log():
@@ -257,7 +254,6 @@ def conversation_loop(messages: MessagesArray, api: OpenAI):
         messages.append(Message(role="assistant", content=response))
         update_log(contents=messages)
         keypress_to_exit("c-d")
-        conversation_loop(messages, api)
 
 
 def orchestrate(api: OpenAI) -> None:
@@ -270,7 +266,7 @@ def orchestrate(api: OpenAI) -> None:
 def see_if_options() -> None | NoReturn:
     answer = confirm("Enter options/log menu? You will not be able to return.")
     if answer:
-        noname.startup()
+        config_tools.startup()
         sys.exit()
 
 
