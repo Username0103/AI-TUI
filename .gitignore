@@ -4,3 +4,6 @@ config.toml
 prompt*
 test.py
 __*
+conversation_log.md
+build
+dist

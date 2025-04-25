@@ -4,10 +4,9 @@ from __future__ import annotations
 
 import os
 import sys
-import webbrowser
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal
+from typing import Literal, NoReturn
 
 import mdv
 import pydantic_core
@@ -17,27 +16,27 @@ from dotenv import load_dotenv
 from openai import OpenAI
 from prompt_toolkit import Application, PromptSession
 from prompt_toolkit.cursor_shapes import CursorShape
-from prompt_toolkit.key_binding import KeyBindings
+from prompt_toolkit.key_binding import KeyBindings, merge_key_bindings
 from prompt_toolkit.layout import Layout
 from prompt_toolkit.layout.containers import Window
-from prompt_toolkit.shortcuts import clear
+from prompt_toolkit.shortcuts import clear, confirm
 from pydantic import BaseModel, ConfigDict
+
+import noname
 
 STARTUP_MESSAGE = (
     'INFO: Press "CTRL" + "D" to submit prompt '
     "or to pass through this info message.\n"
-    'Press "CTRL" + "Z" during the AI\'s response '
-    "to undo the message of the conversation.\n"
-    'Press "CTRL" + "C" during input selection to exit.'
+    'Press "CTRL" + "Z" to undo the '
+    "last message of the conversation.\n"
+    'Press "CTRL" + "C" to exit.'
 )
 WAITING_MESSAGE = "Processing..."
 CONFIG_FILE = "config.toml"
 LOG_NAME = "conversation_log.md"
-
 HOME = Path(__file__).resolve().parent
-# issues:
-# 1: make it so you enter the cli you only handle config after alternate buffer but before the info message
-# 2: make the api key get actually saved into env
+GLOBAL_KEYS = KeyBindings()
+deleted: list[Message] = []
 
 
 @lru_cache
@@ -109,6 +108,28 @@ def get_api() -> OpenAI:
     return client
 
 
+def add_global_bindings(messages: MessagesArray):
+    kb = GLOBAL_KEYS
+
+    @kb.add("c-z")
+    def _(_):
+        if len(messages) > 0 and messages[-1].role != "developer":
+            m = messages.pop(-1)
+            deleted.append(m)
+            print(
+                f'Deleted last message, by {m.role} with {len(m.content)} characters. Press "CONTROL" + "Y" to undo'
+            )
+
+    @kb.add("c-y")
+    def _(_):
+        if len(deleted) > 0:
+            m = deleted.pop(-1)
+            messages.append(m)
+            print(
+                f"Undid last message deletion, was written by {m.role} and had {len(m.content)} characters"
+            )
+
+
 def delete_log():
     log = HOME / LOG_NAME
     log.unlink(missing_ok=True)
@@ -160,40 +181,21 @@ def update_log(contents: MessagesArray) -> None:
         writey.write(formatted_contents)
 
 
-def keypress_to_exit(*comboes: str, messages: MessagesArray | None = None) -> None:
+def keypress_to_exit(*comboes: str) -> None:
     """exits when user inputs the specified combo"""
     kb = KeyBindings()
-    deleted: list[Message] = []
 
-    if messages:
-
-        @kb.add("c-z")
-        def _(_):
-            if len(messages) > 0 and messages[-1].role != "developer":
-                m = messages.pop(-1)
-                deleted.append(m)
-                print(
-                    f'Deleted last message, by {m.role} with {len(m.content)} characters. Press "CONTROL" + "Y" to undo'
-                )
-
-        @kb.add("c-y")
-        def _(_):
-            if len(deleted) > 0:
-                m = deleted.pop(-1)
-                messages.append(m)
-                print(
-                    f"Undid last message deletion, was written by {m.role} and had {len(m.content)} characters"
-                )
-
-    @kb.add(*comboes)
-    def exit_(event):
+    def _exit(event):
         event.app.exit()
+
+    for combo in comboes:
+        kb.add(combo)(_exit)
 
     app = Application(key_bindings=kb, full_screen=False, layout=Layout(Window()))
     app.run()
 
 
-def multiline_editor(initial: str = ""):
+def multiline_editor(initial: str = "") -> tuple[str, bool]:
     kb = KeyBindings()
 
     @kb.add("enter")
@@ -204,12 +206,13 @@ def multiline_editor(initial: str = ""):
     def _(event):
         event.current_buffer.validate_and_handle()
 
-    # buffer = Buffer(document=Document(initial))
+    merged = merge_key_bindings([kb, GLOBAL_KEYS])
+
     session = PromptSession(
         message=">> ",
         multiline=True,
+        key_bindings=merged,
         cursor=CursorShape.BLINKING_BEAM,
-        key_bindings=kb,
         prompt_continuation=lambda width, line_number, is_soft_wrap: ">> ",
     )
 
@@ -253,19 +256,28 @@ def conversation_loop(messages: MessagesArray, api: OpenAI):
         print(mdv.main(response))
         messages.append(Message(role="assistant", content=response))
         update_log(contents=messages)
-        keypress_to_exit("c-d", messages=messages)
+        keypress_to_exit("c-d")
         conversation_loop(messages, api)
 
 
 def orchestrate(api: OpenAI) -> None:
     messages = MessagesArray()
+    add_global_bindings(messages)
+    delete_log()
     conversation_loop(messages, api)
 
 
+def see_if_options() -> None | NoReturn:
+    answer = confirm("Enter options/log menu? You will not be able to return.")
+    if answer:
+        noname.startup()
+        sys.exit()
+
+
 def startup() -> None:
-    delete_log()
     with AlternateBuffer():
         clear()
+        see_if_options()
         get_config()
         clear()
         api = get_api()
@@ -279,5 +291,3 @@ def startup() -> None:
 
 if __name__ == "__main__":
     startup()
-else:
-    webbrowser.open("https://youtu.be/dQw4w9WgXcQ")
