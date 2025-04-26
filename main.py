@@ -37,6 +37,7 @@ STARTUP_MESSAGE = (
 WAITING_MESSAGE = "Processing..."
 CONFIG_FILE = "config.toml"
 LOG_NAME = "conversation_log.md"
+CONTINUE_KEYS = ("c-d", 'enter', 'escape', "q", 'c-q')
 HOME = Path(__file__).resolve().parent
 GLOBAL_KEYS = KeyBindings()
 deleted: list[Message] = []
@@ -130,7 +131,8 @@ def add_global_bindings(messages: MessagesArray):
             deleted.append(m)
             run_in_terminal(
                 lambda: print(
-                    f'Deleted last message, by {m.role} with {len(m.content)} characters. Press "CONTROL" + "Y" to undo'
+                    f'Deleted last message, by {m.role} with {len(m.content)} '
+                    'characters. Press "CONTROL" + "Y" to undo'
                 )
             )
 
@@ -141,7 +143,8 @@ def add_global_bindings(messages: MessagesArray):
             messages.append(m)
             run_in_terminal(
                 lambda: print(
-                    f"Undid last message deletion, was written by {m.role} and had {len(m.content)} characters"
+                    "Undid last message deletion, was written by "
+                    f"{m.role} and had {len(m.content)} characters"
                 )
             )
 
@@ -254,7 +257,7 @@ def make_query(client: OpenAI, messages: MessagesArray) -> str | None:
 
     except openai.APIError as e:
         print(e.message)
-        keypress_to_exit("enter", "escape", "c-d", "c-c")
+        keypress_to_exit(*CONTINUE_KEYS)
         AlternateBuffer().__exit__(None, None, None)
         sys.exit()
 
@@ -273,7 +276,7 @@ def conversation_loop(messages: MessagesArray, api: OpenAI):
         response = make_query(api, messages)
         if not response:
             print("ERROR: did not recieve response from API. Exiting on input.")
-            keypress_to_exit("enter", "escape", "c-d", "c-c")
+            keypress_to_exit(*CONTINUE_KEYS)
             break
 
         print(f"\r{' ' * len(WAITING_MESSAGE)}\r", end="", flush=True)
@@ -293,10 +296,13 @@ def orchestrate() -> None:
 
 
 def see_if_options() -> None | NoReturn:
-    answer = confirm("Enter options/log menu? You will not be able to return.")
-    if answer:
-        config_tools.startup()
+    try:
+        answer = confirm("Enter options/log menu? You will be able to return.")
+    except KeyboardInterrupt:
         sys.exit()
+    if answer:
+        if config_tools.startup() is Exception:
+            sys.exit()
 
 
 def startup() -> None:
@@ -308,11 +314,11 @@ def startup() -> None:
         clear()
         if check_connection():
             print(STARTUP_MESSAGE)
-            keypress_to_exit("c-d")
+            keypress_to_exit(*CONTINUE_KEYS)
             orchestrate()
         else:
             print("Connection error. Check if your internet and the API are online.")
-            keypress_to_exit("c-d", "enter")
+            keypress_to_exit(*CONTINUE_KEYS)
 
 
 if __name__ == "__main__":

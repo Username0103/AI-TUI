@@ -46,22 +46,25 @@ def startup():
     choices = {
         "Edit config.toml": edit_toml,
         "See conversation log": conv_log,
-        "Exit program": None,
+        "Go back to main program": None,
+        "Exit program": Exception,
     }
 
     while True:
         answer = questionary.select(
             message="Select Procedure:", choices=list(choices.keys())
-        ).ask()
-        if not answer:
-            return
+        ).ask(kbi_msg="")
         main.clear()
-        result = choices[answer]
-        if result is None:
+        if not answer:  # for kbi
             return
+        result = choices[answer]
+        if result is None or result is Exception:
+            return result
+
         if callable(result):
             result()
 
 
 if __name__ == "__main__":
-    startup()
+    with main.AlternateBuffer():
+        startup()
