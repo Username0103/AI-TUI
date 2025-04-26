@@ -1,11 +1,5 @@
 # pylint: disable = C0116, C0115, C0114, C0411
 
-"""\
-Handle seeing configurations and editing them \
-with the text editor tool from main.
-Also seeing conversation_log.md.\
-"""
-
 from __future__ import annotations
 
 from pathlib import Path

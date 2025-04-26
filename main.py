@@ -9,7 +9,9 @@ from pathlib import Path
 from typing import Literal, NoReturn
 
 import mdv
+import openai
 import pydantic_core
+import requests
 import toml
 import tomllib
 from dotenv import load_dotenv
@@ -86,6 +88,15 @@ def config_wiz(data: dict) -> Config:
     return config_data
 
 
+def check_connection(timeout=5):
+    url = get_config().endpoint
+    try:
+        _ = requests.head(url=url, timeout=timeout, allow_redirects=True)
+        return True
+    except requests.ConnectionError:
+        return False
+
+
 def get_api_key() -> str:
     env_key = get_config().environ_key
     denv = HOME / ".env"
@@ -117,14 +128,22 @@ def add_global_bindings(messages: MessagesArray):
         if len(messages) > 0 and messages[-1].role != "developer":
             m = messages.pop(-1)
             deleted.append(m)
-            run_in_terminal(lambda: print(f'Deleted last message, by {m.role} with {len(m.content)} characters. Press "CONTROL" + "Y" to undo'))
+            run_in_terminal(
+                lambda: print(
+                    f'Deleted last message, by {m.role} with {len(m.content)} characters. Press "CONTROL" + "Y" to undo'
+                )
+            )
 
     @kb.add("c-y")
     def _redo(_):
         if len(deleted) > 0:
             m = deleted.pop(-1)
             messages.append(m)
-            run_in_terminal(lambda: print(f"Undid last message deletion, was written by {m.role} and had {len(m.content)} characters"))
+            run_in_terminal(
+                lambda: print(
+                    f"Undid last message deletion, was written by {m.role} and had {len(m.content)} characters"
+                )
+            )
 
 
 def delete_log():
@@ -222,14 +241,22 @@ def multiline_editor(initial: str = "") -> tuple[str, bool]:
 
 
 def make_query(client: OpenAI, messages: MessagesArray) -> str | None:
-    response = client.chat.completions.create(
-        model=get_config().model,
-        messages=messages.to_list(),  # type: ignore
-    )
-    if response.choices:
-        return response.choices[0].message.content
-    print(f"\nD: an ERROR!!!: {response}")
-    return None
+    try:
+        response = client.chat.completions.create(
+            model=get_config().model,
+            messages=messages.to_list(),  # type: ignore
+        )
+        if response.choices:
+            return response.choices[0].message.content
+        return None
+    except openai.RateLimitError:
+        print("Too many requests. Try again later.")
+
+    except openai.APIError as e:
+        print(e.message)
+        keypress_to_exit("enter", "escape", "c-d", "c-c")
+        AlternateBuffer().__exit__(None, None, None)
+        sys.exit()
 
 
 def conversation_loop(messages: MessagesArray, api: OpenAI):
@@ -256,10 +283,12 @@ def conversation_loop(messages: MessagesArray, api: OpenAI):
         keypress_to_exit("c-d")
 
 
-def orchestrate(api: OpenAI) -> None:
+def orchestrate() -> None:
+    clear()
     messages = MessagesArray()
     add_global_bindings(messages)
     delete_log()
+    api = get_api()
     conversation_loop(messages, api)
 
 
@@ -274,15 +303,16 @@ def startup() -> None:
     with AlternateBuffer():
         clear()
         see_if_options()
+        clear()
         get_config()
         clear()
-        api = get_api()
-        clear()
-        print(STARTUP_MESSAGE)
-        keypress_to_exit("c-d")
-        clear()
-        orchestrate(api)
-        clear()
+        if check_connection():
+            print(STARTUP_MESSAGE)
+            keypress_to_exit("c-d")
+            orchestrate()
+        else:
+            print("Connection error. Check if your internet and the API are online.")
+            keypress_to_exit("c-d", "enter")
 
 
 if __name__ == "__main__":
