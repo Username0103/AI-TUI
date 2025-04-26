@@ -1,0 +1,31 @@
+
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build EXE with PyInstaller
+        id: pyi
+        uses: Martin005/pyinstaller-action@v1.2.0
+        with:
+          python_ver:  '3.13'
+          spec:        src/main.spec
+          requirements: src/requirements.txt
+
+      - name: Create / update GitHub Release and attach EXE
+        uses: softprops/action-gh-release@v1
+        with:
+          files: ${{ steps.pyi.outputs.executable }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
