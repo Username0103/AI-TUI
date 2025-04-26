@@ -1,31 +1,87 @@
-
-name: Build & Release
+name: build-release
 
 on:
   push:
-    tags:
-      - 'v*.*.*'
+    branches: [master]
+    tags:     ["v*.*.*"]
+  workflow_dispatch:
 
 permissions:
   contents: write
+  packages: read
+  actions:  read
 
 jobs:
-  build-and-release:
+  tag-and-release:
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.bump.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build EXE with PyInstaller
-        id: pyi
-        uses: Martin005/pyinstaller-action@v1.2.0
-        with:
-          python_ver:  '3.13'
-          spec:        src/main.spec
-          requirements: src/requirements.txt
+      - name: Bump semver & create tag
+        id: bump
+        uses: anothrNick/github-tag-action@1.71.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WITH_V: true
+          DEFAULT_BUMP: major
 
-      - name: Create / update GitHub Release and attach EXE
-        uses: softprops/action-gh-release@v1
+      - name: Pre-create empty release  (so other jobs can upload assets)
+        uses: softprops/action-gh-release@v2
         with:
-          files: ${{ steps.pyi.outputs.executable }}
+          tag_name: ${{ steps.bump.outputs.tag }}
+          name:     ${{ steps.bump.outputs.tag }}
+          draft:    false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-per-os:
+    needs:  tag-and-release
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build exe with PyInstaller
+        id: pyi
+        uses: sayyid5416/pyinstaller@v1.8.0
+        with:
+          python_ver: "3.12"
+          spec: src/main.spec
+          requirements: requirements.txt
+
+      - name: get os name
+        id: osname
+        shell: bash
+        run: |
+          case "$RUNNER_OS" in
+            Windows) echo "OS_NAME=windows" >> "$GITHUB_OUTPUT" ;;
+            macOS)   echo "OS_NAME=macOS"   >> "$GITHUB_OUTPUT" ;;
+            *)       echo "OS_NAME=linux"   >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      - name: get zip name
+        id: zipname
+        run: echo "ZIP_NAME=${{ github.event.repository.name }}-${{ steps.osname.outputs.OS_NAME }}-${{ needs.tag-and-release.outputs.tag }}.zip" >> "$GITHUB_OUTPUT"
+        shell: bash
+
+      - name: zip distribution
+        id: zipper
+        uses: TheDoctor0/zip-release@0.7.6
+        with:
+          type: zip
+          directory: ${{ steps.pyi.outputs.executable_path }}
+          filename: ${{ steps.zipname.outputs.ZIP_NAME }}
+
+      - name: upload to existing release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.tag-and-release.outputs.tag }}
+          files:    ${{ steps.zipname.outputs.ZIP_NAME }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

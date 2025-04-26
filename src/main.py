@@ -37,11 +37,17 @@ STARTUP_MESSAGE = (
 WAITING_MESSAGE = "Processing..."
 CONFIG_FILE = "config.toml"
 LOG_NAME = "conversation_log.md"
+ENV_KEY = "API_KEY"
 CONTINUE_KEYS = ("c-d", 'enter', 'escape', "q", 'c-q')
-HOME = Path(__file__).resolve().parent
 GLOBAL_KEYS = KeyBindings()
 deleted: list[Message] = []
 
+def get_home() -> Path:
+    if getattr(sys, 'frozen', False):
+        return Path(sys.executable).parent
+    return Path(__file__).resolve().parent
+
+HOME = get_home()
 
 @lru_cache
 def get_config() -> Config:
@@ -65,7 +71,6 @@ class Config(BaseModel):
     # the defaults can change via the TOML config
     prompt: str = "You are a helpful assistant."
     model: str = "gemini-2.5-flash-preview-04-17"
-    environ_key: str = "API_KEY"
     endpoint: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
     model_config = ConfigDict(str_min_length=2, frozen=True)
 
@@ -99,17 +104,16 @@ def check_connection(timeout=5):
 
 
 def get_api_key() -> str:
-    env_key = get_config().environ_key
     denv = HOME / ".env"
     load_dotenv(dotenv_path=denv)
     try:
-        return os.environ[env_key]
+        return os.environ[ENV_KEY]
     except KeyError:
         api_key = input(
             f"Enter your the API key used for the {get_config().model} model here:\n>"
         )
-        denv.write_text(f"{env_key}={api_key}\n")
-        os.environ[env_key] = api_key  # not really necessary
+        denv.write_text(f"{ENV_KEY}={api_key}\n")
+        os.environ[ENV_KEY] = api_key  # not really necessary
         return api_key
 
 
@@ -308,9 +312,9 @@ def see_if_options() -> None | NoReturn:
 def startup() -> None:
     with AlternateBuffer():
         clear()
-        see_if_options()
-        clear()
         get_config()
+        clear()
+        see_if_options()
         clear()
         if check_connection():
             print(STARTUP_MESSAGE)
