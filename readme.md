@@ -9,6 +9,7 @@ first unzip it
   
 make sure to run this on [windows terminal](https://apps.microsoft.com/detail/9n0dx20hk701?)  
 cmd/powershell kinda works but is really bad due to lack of support for ANSI codes  
+to run just point the terminal at the exe  
   
 #### linux:  
 ```bash
