@@ -1,5 +1,6 @@
 .env
 .venv
+.idea
 config.toml
 prompt*
 test.py

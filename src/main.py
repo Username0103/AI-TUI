@@ -9,13 +9,11 @@ from pathlib import Path
 from typing import Literal, NoReturn
 
 import mdv
-import openai
 import pydantic_core
 import requests
 import toml
 import tomllib
 from dotenv import load_dotenv
-from openai import OpenAI
 from prompt_toolkit import Application, PromptSession
 from prompt_toolkit.application import run_in_terminal
 from prompt_toolkit.cursor_shapes import CursorShape
@@ -26,6 +24,7 @@ from prompt_toolkit.shortcuts import clear, confirm
 from pydantic import BaseModel, ConfigDict
 
 import config_tools
+from backend import make_query
 
 STARTUP_MESSAGE = (
     'INFO: Press "CTRL" + "D" to submit prompt '
@@ -38,16 +37,19 @@ WAITING_MESSAGE = "Processing..."
 CONFIG_FILE = "config.toml"
 LOG_NAME = "conversation_log.md"
 ENV_KEY = "API_KEY"
-CONTINUE_KEYS = ("c-d", 'enter', 'escape', "q", 'c-q')
+CONTINUE_KEYS = ("c-d", "enter", "escape", "q", "c-q")
 GLOBAL_KEYS = KeyBindings()
 deleted: list[Message] = []
 
+
 def get_home() -> Path:
-    if getattr(sys, 'frozen', False):
+    if getattr(sys, "frozen", False):
         return Path(sys.executable).parent
     return Path(__file__).resolve().parent
 
+
 HOME = get_home()
+
 
 @lru_cache
 def get_config() -> Config:
@@ -71,7 +73,8 @@ class Config(BaseModel):
     # the defaults can change via the TOML config
     prompt: str = "You are a helpful assistant."
     model: str = "gemini-2.5-flash-preview-04-17"
-    endpoint: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
+    model_type: Literal["google", "openai"] = "google"
+    endpoint: str = "https://generativelanguage.googleapis.com/v1beta/"
     model_config = ConfigDict(str_min_length=2, frozen=True)
 
 
@@ -79,12 +82,13 @@ def config_wiz(data: dict) -> Config:
     while True:
         try:
             config_data = Config(**data)
-        except pydantic_core.ValidationError as err_array:
+        except pydantic_core.ValidationError as err_list:
             print(f"Configuration error from {CONFIG_FILE}:\n")
-            for err in err_array.errors():
-                print(
-                    f"Invalid field: {err['loc'][0]}"
-                )  # there should not be nesting in a TOML so index[0] is fine
+            for err in err_list.errors():
+                # there should not be nesting in a TOML so index[0] is fine ->
+                field = err["loc"][0]
+                print(f"Invalid field: {field}")
+                print(f"Value was: {data[field]}")
                 print(f"Error type: {err['msg']}")
                 new_value = input("Enter new value: ")
                 data[err["loc"][0]] = new_value
@@ -110,19 +114,11 @@ def get_api_key() -> str:
         return os.environ[ENV_KEY]
     except KeyError:
         api_key = input(
-            f"Enter your the API key used for the {get_config().model} model here:\n>"
+            f"Enter the API key used for the {get_config().model} model here:\n>"
         )
         denv.write_text(f"{ENV_KEY}={api_key}\n")
         os.environ[ENV_KEY] = api_key  # not really necessary
         return api_key
-
-
-def get_api() -> OpenAI:
-    client = OpenAI(
-        base_url=get_config().endpoint,
-        api_key=get_api_key(),
-    )
-    return client
 
 
 def add_global_bindings(messages: MessagesArray):
@@ -135,7 +131,7 @@ def add_global_bindings(messages: MessagesArray):
             deleted.append(m)
             run_in_terminal(
                 lambda: print(
-                    f'Deleted last message, by {m.role} with {len(m.content)} '
+                    f"Deleted last message, by {m.role} with {len(m.content)} "
                     'characters. Press "CONTROL" + "Y" to undo'
                 )
             )
@@ -198,20 +194,17 @@ def format_msgs(m_array: MessagesArray | tuple[Message, ...]) -> str:
 
 def update_log(contents: MessagesArray) -> None:
     file = HOME / LOG_NAME
-    formatted_contents = format_msgs(contents)
-
-    with file.open(mode="w", encoding="utf-8") as writey:
-        writey.write(formatted_contents)
+    file.write_text(format_msgs(contents), encoding="utf-8")
 
 
-def keypress_to_exit(*comboes: str) -> None:
+def keypress_to_exit(*combos: str) -> None:
     """exits when user inputs the specified combo"""
     kb = KeyBindings()
 
     def _exit(event):
         event.app.exit()
 
-    for combo in comboes:
+    for combo in combos:
         kb.add(combo)(_exit)
 
     app = Application(key_bindings=kb, full_screen=False, layout=Layout(Window()))
@@ -247,26 +240,7 @@ def multiline_editor(initial: str = "") -> tuple[str, bool]:
     return received_input, False
 
 
-def make_query(client: OpenAI, messages: MessagesArray) -> str | None:
-    try:
-        response = client.chat.completions.create(
-            model=get_config().model,
-            messages=messages.to_list(),  # type: ignore
-        )
-        if response.choices:
-            return response.choices[0].message.content
-        return None
-    except openai.RateLimitError:
-        print("Too many requests. Try again later.")
-
-    except openai.APIError as e:
-        print(e.message)
-        keypress_to_exit(*CONTINUE_KEYS)
-        AlternateBuffer().__exit__(None, None, None)
-        sys.exit()
-
-
-def conversation_loop(messages: MessagesArray, api: OpenAI):
+def conversation_loop(messages: MessagesArray, api_key: str):
     while True:
         clear()
         print("Enter prompt:")
@@ -277,9 +251,9 @@ def conversation_loop(messages: MessagesArray, api: OpenAI):
         clear()
         print(WAITING_MESSAGE, end="", flush=True)
         messages.append(Message(role="user", content=query))
-        response = make_query(api, messages)
+        response = make_query(api_key, messages, get_config())
         if not response:
-            print("ERROR: did not recieve response from API. Exiting on input.")
+            print("ERROR: did not receive response from API. Exiting on input.")
             keypress_to_exit(*CONTINUE_KEYS)
             break
 
@@ -295,8 +269,8 @@ def orchestrate() -> None:
     messages = MessagesArray()
     add_global_bindings(messages)
     delete_log()
-    api = get_api()
-    conversation_loop(messages, api)
+    api_key = get_api_key()
+    conversation_loop(messages, api_key)
 
 
 def see_if_options() -> None | NoReturn:
