@@ -6,6 +6,11 @@
 this is a terminal based application for talking with llms.  
 it supports extensible configuration, is user-friendly, undo/redo, etc.  
 
+### instructions to run with pip:
+
+see [this](https://pypi.org/project/AI-Terminal-UI/#description)
+
+
 ### instructions to run the exe:
   
 first unzip it
