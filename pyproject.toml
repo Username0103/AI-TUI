@@ -4,19 +4,48 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "AI-Terminal-UI"
-version = "1.0.1"
+version = "1.0.0" # this gets automatically updated
 authors = [
     { "name" = "Username0103", "email" = "Username0103@users.noreply.github.com" },
 ]
 description = "Allows users to use both the gemini and openai APIs in a nice and user-friendly terminal UI way.\nIncludes free cake."
 readme = "pypi-readme.md"
 requires-python = ">=3.10"
-keywords = ["ai", "tui", "cli", "ui", "terminal", "openai", "gemini", "llm"]
+keywords = [
+    "ai",
+    "tui",
+    "cli",
+    "ui",
+    "terminal",
+    "openai",
+    "openai-api",
+    "gemini",
+    "gemini-api",
+    "llm",
+    "chatgpt",
+    "chatbot",
+    "conversational-ai",
+    "generative-ai",
+    "ai-assistant",
+    "command-line",
+    "text-ui",
+    "terminal-app",
+    "prompt-toolkit",
+]
 license = { file = "LICENSE" }
 
 classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "Intended Audience :: Developers",
     "Programming Language :: Python :: 3",
-    "Operating System :: OS Independent",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Natural Language :: English",
+    "Topic :: Utilities",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = [
     "openai>=1.76.0",
