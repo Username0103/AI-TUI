@@ -20,7 +20,7 @@ setup(
     packages=find_packages(where='src'),
     entry_points={
         "console_scripts": [
-            "AI-TUI=AI_TUI.entry:main",
+            "ai-tui=AI_TUI.entry:main",
         ],
     },
 )
