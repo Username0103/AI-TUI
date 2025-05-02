@@ -29,7 +29,7 @@ def get_tools(home: Path) -> list[dict[str, str | dict]]:
     if not tool_data.exists():
         raise FileNotFoundError(f"json tool data not found in {tool_data}")
 
-    return json.loads(tool_data.read_text(encoding="utf-8"))["functions"]
+    return json.loads(tool_data.read_text(encoding="utf-8"))
 
 
 def make_query_openai(

@@ -16,6 +16,8 @@ def get_version() -> str:
 setup(
     name="AI-TUI",
     version=get_version(),
+    include_package_data=True,
+    package_data={"AI_TUI": ["tools/tools.json"]},
     package_dir={"": "src"},
     packages=find_packages(where='src'),
     entry_points={

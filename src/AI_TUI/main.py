@@ -88,6 +88,7 @@ class ArgsSingleton:
             cls.start_on_options = False
         return cls.instance
 
+ArgsSingleton()
 
 @lru_cache
 def get_config() -> Config:
@@ -336,6 +337,7 @@ def go_to_config() -> None | NoReturn:
 
 
 def startup() -> None:
+    
     with AlternateBuffer():
         clear()
         get_config()
@@ -349,7 +351,8 @@ def startup() -> None:
                 keypress_to_exit(*CONTINUE_KEYS)
             orchestrate()
         else:
-            print("Connection error. Check if your internet and the API are online.")
+            print("Connection error. Check if your internet and"
+                  " the API are online.")
             keypress_to_exit(*CONTINUE_KEYS)
 
 

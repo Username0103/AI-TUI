@@ -1,25 +1,23 @@
-{
-    "functions": [
-        {
-            "name": "dice_roll",
-            "description": "get a random number.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "n_min": {
-                        "type": "integer",
-                        "description": "minimum number"
-                    },
-                    "n_max": {
-                        "type": "integer",
-                        "description": "maximum number"
-                    }
+[
+    {
+        "name": "dice_roll",
+        "description": "get a random number.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "n_min": {
+                    "type": "integer",
+                    "description": "minimum number"
                 },
-                "required": [
-                    "n_min",
-                    "n_max"
-                ]
-            }
+                "n_max": {
+                    "type": "integer",
+                    "description": "maximum number"
+                }
+            },
+            "required": [
+                "n_min",
+                "n_max"
+            ]
         }
-    ]
-}
+    }
+]

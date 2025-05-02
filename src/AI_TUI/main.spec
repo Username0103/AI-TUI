@@ -15,16 +15,16 @@ def get_project_root(root: "Path", target_folder="src") -> Path:
         i += 1
         if i > 4:
             break
+        grandparent = parent.parent
         if parent.name == target_folder:
-            return parent.parent if parent.parent else parent  # lol
+            return grandparent if grandparent else parent
     return root
 
-# __file__ doesn't work for some reason so i need to use cwd
-spec_folder = Path.cwd()
-root = Path(spec_folder).resolve()
-home = get_project_root(root)
+spec_folder = Path(SPECPATH).resolve().parent
+home = get_project_root(spec_folder)
 source = home / "src"
 
+name = 'AI-TUI'
 
 if sys.platform == "win32":
     icon = f"{home}/icon.ico"
@@ -47,14 +47,14 @@ a = Analysis(
 pyz = PYZ(a.pure)
 
 exe = EXE(
-        pyz,
-        a.scripts,
-        a.binaries,
-        a.datas,
-        [],
-        name='AI-TUI',
-        icon=icon,
-        console=True,
-        debug=False,
-        upx=True,
-)
+    pyz,
+    a.scripts,
+    a.binaries,
+    a.datas,
+    [],
+    name=name,
+    icon=icon,
+    console=True,
+    debug=False,
+    upx=True,
+) 
