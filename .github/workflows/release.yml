@@ -1,0 +1,133 @@
+name: build-release
+
+on:
+  push:
+    tags:     ["v*.*.*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: read
+  actions:  read
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+
+      - name: get last tag
+        id: last_tag
+        shell: bash
+        run: |
+          PREV=$(git describe --tags --abbrev=0 \
+                  $(git rev-list --tags --skip=1 --max-count=1) 2>/dev/null || true)
+          echo "tag=$PREV" >> "$GITHUB_OUTPUT"
+
+      
+      - name: changelog
+        id: changelog
+        env:
+          LAST_TAG: ${{ steps.last_tag.outputs.tag }}
+        shell: bash
+        run: |
+          RANGE="${LAST_TAG:+$LAST_TAG..}HEAD"
+          echo "generating changelog for range: $RANGE"
+          LOG="$(git --no-pager log "$RANGE" --shortstat --no-merges --no-source)"
+
+          # for some reason you need to do this
+          changelog_body=$(cat <<EOF
+          $LOG
+          EOF
+          )
+
+          changelog="\`\`\`
+          $changelog_body
+          \`\`\`"
+
+          echo "changelog:\r\n$changelog"
+
+          {
+            echo 'log<<EOF'
+            echo "$changelog"
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: create empty release so other jobs can upload assets
+        uses: softprops/action-gh-release@v2
+        with:
+          body: ${{ steps.changelog.outputs.log }}
+          tag_name: ${{ github.ref_name }}
+          name:     ${{ github.ref_name }}
+          draft:    false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-per-os:
+    needs:  create-release
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: get os name
+        id: osname
+        shell: bash
+        run: |
+          case "$RUNNER_OS" in
+            Windows) echo "OS_NAME=windows" >> "$GITHUB_OUTPUT" ;;
+            macOS)   echo "OS_NAME=macOS"   >> "$GITHUB_OUTPUT" ;;
+            *)       echo "OS_NAME=linux"   >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      - name: make name for zip
+        id: zipname
+        run: echo "ZIP_NAME=${{ github.event.repository.name }}-${{ steps.osname.outputs.OS_NAME }}-${{ github.ref_name }}.zip" >> "$GITHUB_OUTPUT"
+        shell: bash
+
+      - name: Build exe with PyInstaller
+        id: pyi
+        uses: sayyid5416/pyinstaller@v1.8.0
+        with:
+          python_ver: "3.12"
+          spec: src/AI_TUI/main.spec
+          requirements: requirements.txt
+          upload_exe_with_name: ${{ steps.zipname.outputs.ZIP_NAME }}
+
+      - name: zip distribution (windows)
+        if: runner.os == 'Windows'
+        run: |
+          pushd "${{ steps.pyi.outputs.executable_path }}"
+          7z a -tzip "${{ github.workspace }}\${{ steps.zipname.outputs.ZIP_NAME }}" *
+          popd
+        shell: pwsh
+
+      - name: zip distribution (posix)
+        id: zipper
+        if: runner.os != 'Windows'
+        uses: TheDoctor0/zip-release@0.7.6
+        with:
+          type: zip
+          path: ${{ steps.pyi.outputs.executable_path }}
+          filename: ${{ steps.zipname.outputs.ZIP_NAME }}
+          custom: -j
+      
+
+  
+
+      - name: upload to existing release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files:    ${{ steps.zipname.outputs.ZIP_NAME }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

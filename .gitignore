@@ -1,0 +1,10 @@
+.env
+.venv
+.idea
+config.toml
+configuration_info
+*.egg-info
+__pycache__*
+conversation_log*
+build
+dist

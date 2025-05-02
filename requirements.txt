@@ -1,0 +1,11 @@
+openai~=1.76.0
+google-genai~=1.12.1
+prompt-toolkit~=3.0.51
+mdv~=1.7.5
+toml~=0.10.2
+python-dotenv~=1.1.0
+pyinstaller~=6.13.0
+questionary~=2.1.0
+requests~=2.32.3
+pydantic~=2.11.3
+setuptools~=80.1.0
