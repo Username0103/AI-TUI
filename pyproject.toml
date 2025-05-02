@@ -3,20 +3,19 @@ requires = ["setuptools>=80.1.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "AI-TUI"
-version = "1.0.0"
+name = "AI-Terminal-UI"
+version = "1.0.1"
 authors = [
     { "name" = "Username0103", "email" = "Username0103@users.noreply.github.com" },
 ]
 description = "Allows users to use both the gemini and openai APIs in a nice and user-friendly terminal UI way.\nIncludes free cake."
-readme = "readme.md"
+readme = "pypi-readme.md"
 requires-python = ">=3.10"
 keywords = ["ai", "tui", "cli", "ui", "terminal", "openai", "gemini", "llm"]
 license = { file = "LICENSE" }
 
 classifiers = [
     "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
 dependencies = [

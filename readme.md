@@ -1,7 +1,12 @@
 
 [//]: # "TODO: write a real readme or something"
 
-### instructions:
+### what it does:
+
+this is a terminal based application for talking with llms.  
+it supports extensible configuration, is user-friendly, undo/redo, etc.  
+
+### instructions to run the exe:
   
 first unzip it
   
@@ -26,16 +31,18 @@ xattr -d com.apple.quarantine main
 ```  
 not really sure if xattr is needed because I don't have a mac  
 
-### building it:
+### building the executable from source:
   
 make sure your cwd is on the package root or on root/src due to .spec reasons.
   
 ```bash
 python -m venv .venv
+
 # windows:
 .venv\Scripts\activate
 # linux or mac:
 source .venv/bin/activate
+
 pip install -r requirements.txt
 pyinstaller src/AI_TUI/main.spec
 ```

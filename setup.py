@@ -9,9 +9,9 @@ def get_version() -> str:
     try:
         return out(
             ["git", "describe", "--tags", "--abbrev=0"], universal_newlines=True
-        ).strip()
+        ).strip().rsplit("v", maxsplit=1)[-1]
     except SubprocessError:
-        return "Unknown"
+        return "1.0.0"
 
 setup(
     name="AI-TUI",
