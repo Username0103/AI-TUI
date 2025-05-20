@@ -1,5 +1,5 @@
 # pylint: disable = C0116, C0115, C0114, C0411
-"""this is broken."""
+"""this is broken. wuh-oh!"""
 from __future__ import annotations
 
 from functools import lru_cache
