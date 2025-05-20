@@ -5,6 +5,9 @@
 
 this is a terminal based application for talking with llms.  
 it supports extensible configuration, is user-friendly, undo/redo, etc.  
+is compatible with both OpenAI and Gemini  
+
+also, you can [create gemini api keys for free](https://aistudio.google.com/app/apikey)!  
 
 ### instructions to run with pip:
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import os
 import sys
 from functools import lru_cache
 from pathlib import Path
@@ -19,11 +20,11 @@ from prompt_toolkit.cursor_shapes import CursorShape
 from prompt_toolkit.key_binding import KeyBindings, merge_key_bindings
 from prompt_toolkit.layout import Layout
 from prompt_toolkit.layout.containers import Window
-from prompt_toolkit.shortcuts import clear, confirm
-from pydantic import BaseModel, ConfigDict
+from prompt_toolkit.shortcuts import confirm
 
 from AI_TUI import config_tools
 from AI_TUI.backend import make_query
+from AI_TUI.pydantic_stuff.models import Config
 
 STARTUP_MESSAGE = (
     'INFO: Press "CTRL" + "D" to submit prompt '
@@ -78,6 +79,10 @@ def get_src() -> Path:
 SOURCE = get_src()
 
 
+def clear() -> int:
+    return os.system("cls") if os.name == "nt" else os.system("clear")
+
+
 class ArgsSingleton:
     _instance = None
 
@@ -88,7 +93,9 @@ class ArgsSingleton:
             cls.start_on_options = False
         return cls.instance
 
+
 ArgsSingleton()
+
 
 @lru_cache
 def get_config() -> Config:
@@ -104,19 +111,8 @@ def get_config() -> Config:
 
 def write_config(data: dict) -> None:
     file = HOME / CONFIG_FILE
-    with file.open("w") as f:
+    with file.open("w", encoding="utf-8") as f:
         toml.dump(data, f)
-
-
-class Config(BaseModel):
-    # the defaults can change via the TOML config
-    api_key: str
-    prompt: str = "You are a helpful assistant."
-    overwrite_log: Literal["yes", "no"] = "yes"
-    model: str = "gemini-2.5-flash-preview-04-17"
-    api_type: Literal["google", "openai"] = "google"
-    endpoint: str = "https://generativelanguage.googleapis.com/v1beta/"
-    model_config = ConfigDict(str_min_length=2, frozen=True)
 
 
 def config_wiz(data: dict) -> Config:
@@ -124,8 +120,9 @@ def config_wiz(data: dict) -> Config:
         try:
             config_data = Config(**data)
         except pydantic_core.ValidationError as err_list:
-            print(f"Configuration required for {CONFIG_FILE}:\n")
-            for err in err_list.errors():
+            try:
+                err = err_list.errors()[0]
+                print(f"Configuration required for {CONFIG_FILE}:\n")
                 # there should not be nesting in a TOML so index[0] is fine ->
                 field = err["loc"][0]
                 print(f"Invalid field: {field}")
@@ -134,22 +131,25 @@ def config_wiz(data: dict) -> Config:
                 print(f"Error type: {err['msg']}")
                 new_value = input("Enter new value: ")
                 data[err["loc"][0]] = new_value
+                clear()
+            except KeyboardInterrupt:
+                sys.exit()
         else:
             break
-    write_config({"main": config_data.model_dump()})
+    write_config({"main": config_data.model_dump(mode="json")})
     return config_data
 
 
-def check_connection(timeout=5):
+def check_connection(timeout=5) -> bool:
     url = get_config().endpoint
     try:
-        _ = requests.head(url=url, timeout=timeout, allow_redirects=True)
+        _ = requests.head(url=str(url), timeout=timeout, allow_redirects=True)
         return True
     except requests.ConnectionError:
         return False
 
 
-def add_global_bindings(messages: MessagesArray):
+def add_global_bindings(messages: MessagesArray) -> None:
     kb = GLOBAL_KEYS
 
     @kb.add("c-z")
@@ -220,7 +220,7 @@ class Message:
         self.role = role
         self.content = content
 
-    def to_dict(self):
+    def to_dict(self) -> dict[str, str]:
         return {"role": self.role, "content": self.content}
 
 
@@ -337,7 +337,6 @@ def go_to_config() -> None | NoReturn:
 
 
 def startup() -> None:
-    
     with AlternateBuffer():
         clear()
         get_config()
@@ -345,15 +344,9 @@ def startup() -> None:
         if not ArgsSingleton.skip_intro:
             see_if_options()
             clear()
-        if check_connection():
-            if not ArgsSingleton.skip_intro:
-                print(STARTUP_MESSAGE)
-                keypress_to_exit(*CONTINUE_KEYS)
-            orchestrate()
-        else:
-            print("Connection error. Check if your internet and"
-                  " the API are online.")
+            print(STARTUP_MESSAGE)
             keypress_to_exit(*CONTINUE_KEYS)
+        orchestrate()
 
 
 if __name__ == "__main__":

@@ -157,7 +157,7 @@ def make_query(
 
     if config.api_type == "openai":
         api = OpenAI(
-            base_url=config.endpoint,
+            base_url=str(config.endpoint),
             api_key=api_key,
         )
         return make_query_openai(api, messages, config, home)
